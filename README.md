@@ -134,8 +134,11 @@ public Response foo(
     final Request request) throws RestInterfaceException
 ```
 
-The REST service harness automatically ingests the following HTTP headers and makes their values available in the transaction context.  The REST client uses the values from the transaction context to forward these HTTP headers to the target endpoint.
+The REST service harness automatically ingests the following HTTP headers and makes their values available in the transaction context.  The REST client uses the values from the transaction context to forward these HTTP headers to the target endpoint.  The value of the **X-Request-Id** HTTP header is used as the correlation id in the logs written by the Melior logging system.
 ```
 X-Origin-Id
 X-Request-Id
 ```
+
+## References
+Refer to the [**Melior Service Harness Core**](https://github.com/MeliorArtefacts/service-harness-core) module for more detail on the Melior logging system.
