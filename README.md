@@ -106,6 +106,10 @@ The REST client may be configured using these application properties.
 Use the REST service harness to get all the required decoration for a Spring Boot application and a REST controller, along with the standard Melior logging system and a configuration object that may be used to access the application properties anywhere and at any time in the application code, even in the constructor.
 ```
 public class MyApplication extends RestService
+
+public MyApplication(ServiceContext serviceContext) throws ApplicationException {
+    super(serviceContext);
+}
 ```
 
 The REST service harness is auto-configured from the application properties.
