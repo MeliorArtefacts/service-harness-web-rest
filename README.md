@@ -91,7 +91,7 @@ public class Response implements ResponseExceptionMapper {
 The REST client may be configured using these application properties.
 
 |Name|Default|Description|
-|:---|:---|:---|
+|:--------------------|:---|:---|
 |`url`||The URL of the target endpoint|
 |`username`||The user name, if the target endpoint requires one|
 |`password`||The password, if the target endpoint requires one|
