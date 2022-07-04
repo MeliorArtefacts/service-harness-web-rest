@@ -25,8 +25,7 @@ Create a bean to instantiate the REST client.  The REST client uses connection p
 ```
 @Bean("myclient")
 @ConfigurationProperties("myclient")
-public RestClient client()
-{
+public RestClient client() {
     return RestClientBuilder.create().build();
 }
 ```
