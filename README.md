@@ -42,6 +42,7 @@ myclient.inactivity-timeout=15
 Wire in and use the REST client.  There is no need to validate the HTTP response being returned from the target endpoint.  The REST client does so automatically and raises a **RemotingException** if the HTTP response indicates a failure.
 ```
 @Autowired
+@Qualifier("myclient")
 private RestClient client;
 
 public Response foo(Request request) throws RemotingException {
