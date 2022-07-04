@@ -95,6 +95,9 @@ The REST client may be configured using these application properties.
 |`url`||The URL of the target endpoint|
 |`username`||The user name, if the target endpoint requires one|
 |`password`||The password, if the target endpoint requires one|
+|`proxy-url`||The URL of the proxy server|
+|`proxy-username`||The proxy user name, if the proxy server requires one|
+|`proxy-password`||The proxy password, if the proxy server requires one|
 |`maximum-connections`|1000|The maximum number of connections to open to the target endpoint|
 |`connection-timeout`|30 s|The amount of time to allow for a new connection to open to the target endpoint|
 |`request-timeout`|60 s|The amount of time to allow for a request to the target endpoint to complete|
