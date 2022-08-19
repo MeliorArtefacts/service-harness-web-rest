@@ -115,6 +115,8 @@ public class RestClient extends RestClientConfig{
     final RestClientConfig clientConfig){
     super.configure(clientConfig);
 
+        complete();
+
     return this;
   }
 
