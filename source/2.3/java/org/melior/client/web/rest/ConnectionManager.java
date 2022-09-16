@@ -9,16 +9,24 @@
 package org.melior.client.web.rest;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.SSLContext;
 import org.apache.http.HttpClientConnection;
 import org.apache.http.HttpHost;
+import org.apache.http.config.RegistryBuilder;
 import org.apache.http.conn.ConnectionRequest;
 import org.apache.http.conn.HttpClientConnectionManager;
 import org.apache.http.conn.routing.HttpRoute;
+import org.apache.http.conn.socket.ConnectionSocketFactory;
+import org.apache.http.conn.socket.PlainConnectionSocketFactory;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.pool.PoolStats;
 import org.apache.http.protocol.HttpContext;
+import org.melior.client.ssl.ClientSSLContext;
 import org.melior.logging.core.Logger;
 import org.melior.logging.core.LoggerFactory;
+import org.melior.util.object.ObjectUtil;
 
 /**
  * TODO
@@ -35,12 +43,37 @@ public class ConnectionManager implements HttpClientConnectionManager{
   /**
    * Constructor.
    * @param configuration The client configuration
+   * @param ssl The SSL indicator
+   * @param sslContext The SSL context
    */
   public ConnectionManager(
-    final RestClientConfig configuration){
+    final RestClientConfig configuration,
+    final boolean ssl,
+    final SSLContext sslContext){
         super();
 
-        connectionManager = new PoolingHttpClientConnectionManager();
+        RegistryBuilder<ConnectionSocketFactory> socketFactoryRegistryBuilder;
+
+        socketFactoryRegistryBuilder = RegistryBuilder.<ConnectionSocketFactory>create()
+      .register("http", PlainConnectionSocketFactory.getSocketFactory());
+
+        if (ssl == true){
+
+            if ((configuration.getKeyStore() != null) || (configuration.getTrustStore() != null)){
+                socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
+          ObjectUtil.coalesce(sslContext, ClientSSLContext.ofKeyStore("TLS", configuration)), NoopHostnameVerifier.INSTANCE));
+      }
+      else{
+                socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
+          ObjectUtil.coalesce(sslContext, ClientSSLContext.ofLenient("TLS")), NoopHostnameVerifier.INSTANCE));
+      }
+
+    }
+    else{
+            socketFactoryRegistryBuilder.register("https", SSLConnectionSocketFactory.getSocketFactory());
+    }
+
+        connectionManager = new PoolingHttpClientConnectionManager(socketFactoryRegistryBuilder.build());
     connectionManager.setMaxTotal(1000);
     connectionManager.setDefaultMaxPerRoute(1000);
     connectionManager.setValidateAfterInactivity(Integer.MAX_VALUE);

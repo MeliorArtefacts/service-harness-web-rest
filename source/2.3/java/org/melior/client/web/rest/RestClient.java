@@ -11,11 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
-
 import javax.annotation.PostConstruct;
-import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.conn.routing.HttpRoute;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -25,7 +22,6 @@ import org.melior.client.core.RawAwarePayload;
 import org.melior.client.exception.RemotingException;
 import org.melior.client.exception.ResponseExceptionMapper;
 import org.melior.client.http.HttpHeader;
-import org.melior.client.ssl.ClientSSLContext;
 import org.melior.context.transaction.TransactionContext;
 import org.melior.logging.core.Logger;
 import org.melior.logging.core.LoggerFactory;
@@ -101,7 +97,7 @@ public class RestClient extends RestClientConfig{
   private void complete(){
 
         if (connectionManager == null){
-            connectionManager = new ConnectionManager(this);
+            connectionManager = new ConnectionManager(this, ssl, sslContext);
     }
 
   }
@@ -134,72 +130,74 @@ public class RestClient extends RestClientConfig{
       return;
     }
 
-        if (StringUtils.hasLength(getUrl()) == false){
-      throw new RemotingException(ExceptionType.LOCAL_APPLICATION, "URL must be configured.");
-    }
+    synchronized (this){
 
-        if (basicAuth == true){
-
-            if (StringUtils.hasLength(getUsername()) == false){
-        throw new RemotingException(ExceptionType.LOCAL_APPLICATION, "User name must be configured.");
+            if (restTemplate != null){
+        return;
       }
 
-            if (StringUtils.hasLength(getPassword()) == false){
-        throw new RemotingException(ExceptionType.LOCAL_APPLICATION, "Password must be configured.");
+            if (StringUtils.hasLength(getUrl()) == false){
+        throw new RemotingException(ExceptionType.LOCAL_APPLICATION, "URL must be configured.");
       }
 
+            if (basicAuth == true){
+
+                if (StringUtils.hasLength(getUsername()) == false){
+          throw new RemotingException(ExceptionType.LOCAL_APPLICATION, "User name must be configured.");
+        }
+
+                if (StringUtils.hasLength(getPassword()) == false){
+          throw new RemotingException(ExceptionType.LOCAL_APPLICATION, "Password must be configured.");
+        }
+
+      }
+
+            if ((mediaType == MediaType.APPLICATION_XML)
+        || (mediaType == MediaType.TEXT_XML)){
+                inputFactory = new WstxInputFactory();
+        inputFactory.setProperty(XMLInputFactory2.IS_NAMESPACE_AWARE, Boolean.FALSE);
+
+                objectMapper = new XmlMapper(new XmlFactory(inputFactory, new WstxOutputFactory()));
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+      }
+      else{
+                objectMapper = new ObjectMapper();
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+      }
+
+            connectionManager.setMaxPerRoute(new HttpRoute(HttpHostUtil.urlToHost(getUrl())), getMaximumConnections());
+
+            connectionManager.setValidateAfterInactivity(getInactivityTimeout());
+
+            requestConfig =  RequestConfig.custom()
+        .setConnectionRequestTimeout(getConnectionTimeout())
+        .setConnectTimeout(getConnectionTimeout())
+        .setSocketTimeout(getRequestTimeout())
+        .build();
+
+            httpClientBuilder = HttpClients.custom()
+        .setConnectionManager(connectionManager)
+        .setConnectionManagerShared(false)
+        .setKeepAliveStrategy(new ConnectionKeepAliveStrategy(getInactivityTimeout()))
+        .setDefaultRequestConfig(requestConfig);
+
+            if (StringUtils.hasLength(getProxyUrl()) == true){
+                httpClientBuilder
+          .setProxy(HttpHostUtil.urlToHost(getProxyUrl()));
+      }
+
+            if ((StringUtils.hasLength(getProxyUsername()) == true)
+        && (StringUtils.hasLength(getProxyPassword()) == true)){
+                proxyAuth = true;
+      }
+
+            requestFactory = new HttpComponentsClientHttpRequestFactory();
+      requestFactory.setHttpClient(httpClientBuilder.build());
+
+            restTemplate = new RestTemplate();
+      restTemplate.setRequestFactory(requestFactory);
     }
 
-        if ((mediaType == MediaType.APPLICATION_XML)
-      || (mediaType == MediaType.TEXT_XML)){
-            inputFactory = new WstxInputFactory();
-      inputFactory.setProperty(XMLInputFactory2.IS_NAMESPACE_AWARE, Boolean.FALSE);
-
-            objectMapper = new XmlMapper(new XmlFactory(inputFactory, new WstxOutputFactory()));
-      objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    }
-    else{
-            objectMapper = new ObjectMapper();
-      objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    }
-
-        connectionManager.setMaxPerRoute(new HttpRoute(HttpHostUtil.urlToHost(getUrl())), getMaximumConnections());
-
-        connectionManager.setValidateAfterInactivity(getInactivityTimeout());
-
-        requestConfig =  RequestConfig.custom()
-      .setConnectionRequestTimeout(getConnectionTimeout())
-      .setConnectTimeout(getConnectionTimeout())
-      .setSocketTimeout(getRequestTimeout())
-      .build();
-
-        httpClientBuilder = HttpClients.custom()
-      .setConnectionManager(connectionManager)
-      .setConnectionManagerShared(false)
-      .setKeepAliveStrategy(new ConnectionKeepAliveStrategy(getInactivityTimeout()))
-      .setDefaultRequestConfig(requestConfig);
-
-        if (StringUtils.hasLength(getProxyUrl()) == true){
-            httpClientBuilder
-        .setProxy(HttpHostUtil.urlToHost(getProxyUrl()));
-    }
-
-        if ((StringUtils.hasLength(getProxyUsername()) == true)
-      && (StringUtils.hasLength(getProxyPassword()) == true)){
-            proxyAuth = true;
-    }
-
-        if (ssl == true){
-            httpClientBuilder
-        .setSSLContext((sslContext == null) ? ClientSSLContext.ofLenient("TLS") : sslContext)
-        .setSSLHostnameVerifier(new HostnameVerifier() {public boolean verify(String hostname, SSLSession session) {return false;}});
-    }
-
-        requestFactory = new HttpComponentsClientHttpRequestFactory();
-    requestFactory.setHttpClient(httpClientBuilder.build());
-
-        restTemplate = new RestTemplate();
-    restTemplate.setRequestFactory(requestFactory);
   }
 
   /**
