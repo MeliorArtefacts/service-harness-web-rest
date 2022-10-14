@@ -15,6 +15,8 @@ import org.melior.client.core.ClientConfig;
  * @since 2.3
  */
 public class RestClientConfig extends ClientConfig{
+    private String token;
+
     private String proxyUrl;
 
     private String proxyUsername;
@@ -36,6 +38,7 @@ public class RestClientConfig extends ClientConfig{
   public RestClientConfig configure(
     final RestClientConfig clientConfig){
     super.configure(clientConfig);
+    this.token = clientConfig.token;
     this.proxyUrl = clientConfig.proxyUrl;
     this.proxyUsername = clientConfig.proxyUsername;
     this.proxyPassword = clientConfig.proxyPassword;
@@ -43,6 +46,23 @@ public class RestClientConfig extends ClientConfig{
     return this;
   }
 
+  /**
+   * Get authentication token.
+   * @return The authentication token
+   */
+  public String getToken(){
+    return token;
+  }
+
+  /**
+   * Set authentication token.
+   * @param token The authentication token
+   */
+  public void setToken(
+    final String token){
+    this.token = token;
+  }
+ 
   /**
    * Get proxy URL.
    * @return The proxy URL
@@ -93,5 +113,5 @@ public class RestClientConfig extends ClientConfig{
     final String proxyPassword){
     this.proxyPassword = proxyPassword;
   }
- 
+
 }

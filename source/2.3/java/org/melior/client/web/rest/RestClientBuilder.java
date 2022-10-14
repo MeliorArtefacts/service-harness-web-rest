@@ -20,6 +20,10 @@ public class RestClientBuilder{
 
     private boolean basicAuth = false;
 
+    private boolean bearerAuth = false;
+
+    private boolean apiKeyAuth = false;
+
     private boolean ssl = false;
 
     private SSLContext sslContext;
@@ -44,7 +48,7 @@ public class RestClientBuilder{
    * @return The REST client
    */
   public RestClient build(){
-        return new RestClient(mediaType, basicAuth, ssl, sslContext);
+        return new RestClient(mediaType, basicAuth, bearerAuth, apiKeyAuth, ssl, sslContext);
   }
 
   /**
@@ -60,11 +64,31 @@ public class RestClientBuilder{
   }
 
   /**
-   * Enable basic auth.
+   * Enable basic authentication.
    * @return The REST client builder
    */
   public RestClientBuilder basicAuth(){
         this.basicAuth = true;
+
+    return this;
+  }
+
+  /**
+   * Enable bearer authentication.
+   * @return The REST client builder
+   */
+  public RestClientBuilder bearerAuth(){
+        this.bearerAuth = true;
+
+    return this;
+  }
+
+  /**
+   * Enable API key authentication.
+   * @return The REST client builder
+   */
+  public RestClientBuilder apiKeyAuth(){
+        this.bearerAuth = true;
 
     return this;
   }

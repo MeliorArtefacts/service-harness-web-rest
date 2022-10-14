@@ -20,6 +20,7 @@ import org.melior.logging.core.LoggerFactory;
 import org.melior.service.exception.ApplicationException;
 import org.melior.service.exception.ExceptionType;
 import org.melior.service.work.WorkManager;
+import org.melior.util.object.ObjectUtil;
 import org.melior.util.time.AccurateLocalDateTime;
 import org.melior.util.time.DateFormatter;
 import org.springframework.core.MethodParameter;
@@ -178,6 +179,8 @@ public class RestRequestInterceptor implements HandlerInterceptor, ResponseBodyA
     final HttpServletRequest request,
     final String operation) throws Exception{
         String methodName = "startRequest";
+    String transactionId;
+    String correlationId;
     TransactionContext transactionContext;
 
         transactionContext = TransactionContext.get();
@@ -189,9 +192,13 @@ public class RestRequestInterceptor implements HandlerInterceptor, ResponseBodyA
     }
 
     try{
+            transactionId = request.getHeader("X-Request-Id");
+      correlationId = request.getHeader("X-Correlation-Id");
+
             transactionContext.startTransaction();
       transactionContext.setOriginId(request.getHeader("X-Origin-Id"));
-      transactionContext.setTransactionId(getTransactionId(request.getHeader("X-Request-Id")));
+      transactionContext.setTransactionId(getTransactionId(ObjectUtil.coalesce(transactionId, correlationId)));
+      transactionContext.setCorrelationId(ObjectUtil.coalesce(correlationId, transactionContext.getTransactionId()));
       transactionContext.setOperation(operation);
     }
     catch (Exception exception){
@@ -237,6 +244,7 @@ public class RestRequestInterceptor implements HandlerInterceptor, ResponseBodyA
 
             headers = response.getHeaders();
       headers.add("X-Request-Id", transactionContext.getTransactionId());
+      headers.add("X-Correlation-Id", transactionContext.getCorrelationId());
       headers.add("Request-Timestamp", requestTimestamp);
       headers.add("Response-Timestamp", responseTimestamp);
     }
@@ -282,6 +290,7 @@ public class RestRequestInterceptor implements HandlerInterceptor, ResponseBodyA
                 responseTimestamp = DateFormatter.formatTimestamp(AccurateLocalDateTime.now(), TIMESTAMP_FORMAT);
 
                 response.setHeader("X-Request-Id", transactionContext.getTransactionId());
+        response.setHeader("X-Correlation-Id", transactionContext.getCorrelationId());
         response.setHeader("Request-Timestamp", requestTimestamp);
         response.setHeader("Response-Timestamp", responseTimestamp);
       }

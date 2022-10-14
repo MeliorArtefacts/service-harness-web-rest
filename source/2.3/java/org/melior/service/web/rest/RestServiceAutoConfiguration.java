@@ -25,6 +25,7 @@ public class RestServiceAutoConfiguration implements WebMvcConfigurer{
 
   /**
    * Constructor.
+   * @param serviceContext The service context
    */
   public RestServiceAutoConfiguration(
     final ServiceContext serviceContext){

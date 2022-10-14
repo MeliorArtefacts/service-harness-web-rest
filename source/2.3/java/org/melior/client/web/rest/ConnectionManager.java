@@ -26,7 +26,6 @@ import org.apache.http.protocol.HttpContext;
 import org.melior.client.ssl.ClientSSLContext;
 import org.melior.logging.core.Logger;
 import org.melior.logging.core.LoggerFactory;
-import org.melior.util.object.ObjectUtil;
 
 /**
  * TODO
@@ -59,13 +58,17 @@ public class ConnectionManager implements HttpClientConnectionManager{
 
         if (ssl == true){
 
-            if ((configuration.getKeyStore() != null) || (configuration.getTrustStore() != null)){
+            if (sslContext != null){
                 socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
-          ObjectUtil.coalesce(sslContext, ClientSSLContext.ofKeyStore("TLS", configuration)), NoopHostnameVerifier.INSTANCE));
+          sslContext, NoopHostnameVerifier.INSTANCE));
+      }
+            else if ((configuration.getKeyStore() != null) || (configuration.getTrustStore() != null)){
+                socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
+          ClientSSLContext.ofKeyStore("TLS", configuration), NoopHostnameVerifier.INSTANCE));
       }
       else{
                 socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
-          ObjectUtil.coalesce(sslContext, ClientSSLContext.ofLenient("TLS")), NoopHostnameVerifier.INSTANCE));
+          ClientSSLContext.ofLenient("TLS"), NoopHostnameVerifier.INSTANCE));
       }
 
     }
@@ -73,7 +76,8 @@ public class ConnectionManager implements HttpClientConnectionManager{
             socketFactoryRegistryBuilder.register("https", SSLConnectionSocketFactory.getSocketFactory());
     }
 
-        connectionManager = new PoolingHttpClientConnectionManager(socketFactoryRegistryBuilder.build());
+        connectionManager = new PoolingHttpClientConnectionManager(socketFactoryRegistryBuilder.build(),
+      null, null, null, -1, TimeUnit.MILLISECONDS);
     connectionManager.setMaxTotal(1000);
     connectionManager.setDefaultMaxPerRoute(1000);
     connectionManager.setValidateAfterInactivity(Integer.MAX_VALUE);

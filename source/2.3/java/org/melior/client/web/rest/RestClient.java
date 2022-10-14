@@ -11,10 +11,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.PostConstruct;
 import javax.net.ssl.SSLContext;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.conn.routing.HttpRoute;
+import org.apache.http.impl.DefaultConnectionReuseStrategy;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.codehaus.stax2.XMLInputFactory2;
@@ -22,6 +22,9 @@ import org.melior.client.core.RawAwarePayload;
 import org.melior.client.exception.RemotingException;
 import org.melior.client.exception.ResponseExceptionMapper;
 import org.melior.client.http.HttpHeader;
+import org.melior.client.web.rest.patch.MappingJackson2HttpMessageConverter;
+import org.melior.client.web.rest.patch.MappingJackson2XmlHttpMessageConverter;
+import org.melior.client.web.rest.patch.StringHttpMessageConverter;
 import org.melior.context.transaction.TransactionContext;
 import org.melior.logging.core.Logger;
 import org.melior.logging.core.LoggerFactory;
@@ -55,13 +58,15 @@ public class RestClient extends RestClientConfig{
 
     private boolean basicAuth;
 
+    private boolean bearerAuth;
+
+    private boolean apiKeyAuth;
+
     private boolean proxyAuth;
 
     private boolean ssl;
 
     private SSLContext sslContext;
-
-    private static ConnectionManager connectionManager;
 
     private ObjectMapper objectMapper;
 
@@ -70,13 +75,17 @@ public class RestClient extends RestClientConfig{
   /**
    * Constructor.
    * @param mediaType The media type
-   * @param basicAuth The basic auth indicator
+   * @param basicAuth The basic authentication indicator
+   * @param bearerAuth The bearer authentication indicator
+   * @param apiKeyAuth The API key authentication indicator
    * @param ssl The SSL indicator
    * @param sslContext The SSL context
    */
   RestClient(
     final MediaType mediaType,
     final boolean basicAuth,
+    final boolean bearerAuth,
+    final boolean apiKeyAuth,
     final boolean ssl,
     final SSLContext sslContext){
         super();
@@ -85,21 +94,13 @@ public class RestClient extends RestClientConfig{
 
         this.basicAuth = basicAuth;
 
+        this.bearerAuth = bearerAuth;
+
+        this.apiKeyAuth = apiKeyAuth;
+
         this.ssl = ssl;
 
         this.sslContext = sslContext;
-  }
-
-  /**
-   * Complete construction.
-   */
-  @PostConstruct
-  private void complete(){
-
-        if (connectionManager == null){
-            connectionManager = new ConnectionManager(this, ssl, sslContext);
-    }
-
   }
 
   /**
@@ -111,8 +112,6 @@ public class RestClient extends RestClientConfig{
     final RestClientConfig clientConfig){
     super.configure(clientConfig);
 
-        complete();
-
     return this;
   }
 
@@ -122,6 +121,7 @@ public class RestClient extends RestClientConfig{
    */
   private void initialize() throws RemotingException{
         XMLInputFactory2 inputFactory;
+    ConnectionManager connectionManager;
     RequestConfig requestConfig;
     HttpClientBuilder httpClientBuilder;
     HttpComponentsClientHttpRequestFactory requestFactory;
@@ -152,6 +152,22 @@ public class RestClient extends RestClientConfig{
 
       }
 
+            if (bearerAuth == true){
+
+                if (StringUtils.hasLength(getToken()) == false){
+          throw new RemotingException(ExceptionType.LOCAL_APPLICATION, "Token must be configured.");
+        }
+
+      }
+
+            if (apiKeyAuth == true){
+
+                if (StringUtils.hasLength(getToken()) == false){
+          throw new RemotingException(ExceptionType.LOCAL_APPLICATION, "Token must be configured.");
+        }
+
+      }
+
             if ((mediaType == MediaType.APPLICATION_XML)
         || (mediaType == MediaType.TEXT_XML)){
                 inputFactory = new WstxInputFactory();
@@ -165,9 +181,9 @@ public class RestClient extends RestClientConfig{
         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
       }
 
-            connectionManager.setMaxPerRoute(new HttpRoute(HttpHostUtil.urlToHost(getUrl())), getMaximumConnections());
-
-            connectionManager.setValidateAfterInactivity(getInactivityTimeout());
+            connectionManager = new ConnectionManager(this, ssl, sslContext);
+      connectionManager.setMaxPerRoute(new HttpRoute(HttpHostUtil.urlToHost(getUrl())), getMaximumConnections());
+      connectionManager.setValidateAfterInactivity(getInactivityTimeout());
 
             requestConfig =  RequestConfig.custom()
         .setConnectionRequestTimeout(getConnectionTimeout())
@@ -180,6 +196,12 @@ public class RestClient extends RestClientConfig{
         .setConnectionManagerShared(false)
         .setKeepAliveStrategy(new ConnectionKeepAliveStrategy(getInactivityTimeout()))
         .setDefaultRequestConfig(requestConfig);
+
+            if (ssl == true){
+                httpClientBuilder
+          .setConnectionReuseStrategy(new DefaultConnectionReuseStrategy())
+          .setUserTokenHandler(new UserTokenHandler());
+      }
 
             if (StringUtils.hasLength(getProxyUrl()) == true){
                 httpClientBuilder
@@ -196,12 +218,17 @@ public class RestClient extends RestClientConfig{
 
             restTemplate = new RestTemplate();
       restTemplate.setRequestFactory(requestFactory);
+      restTemplate.getMessageConverters().add(0, new StringHttpMessageConverter());
+      restTemplate.getMessageConverters().add(1, new MappingJackson2XmlHttpMessageConverter());
+      restTemplate.getMessageConverters().add(2, new MappingJackson2HttpMessageConverter());
     }
 
   }
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriParameters The URI parameters
    * @param responseType The response object type
    * @param exceptionMapper The response exception mapper
@@ -217,6 +244,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param responseType The response object type
@@ -234,6 +263,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param httpHeaders The HTTP headers
@@ -253,6 +284,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param responseType The response object type
    * @param exceptionMapper The response exception mapper
    * @return The response object
@@ -266,6 +299,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param responseType The response object type
    * @param exceptionMapper The response exception mapper
@@ -281,6 +316,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param httpHeaders The HTTP headers
    * @param responseType The response object type
@@ -298,6 +335,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
    * @param uriParameters The URI parameters
    * @param responseType The response object type
    * @return The response object
@@ -311,6 +349,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param responseType The response object type
@@ -326,6 +365,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param httpHeaders The HTTP headers
@@ -343,6 +383,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
    * @param responseType The response object type
    * @return The response object
    * @throws RemotingException if unable to send the request, or when an error response is received
@@ -354,6 +395,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param responseType The response object type
    * @return The response object
@@ -367,6 +409,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send GET request and receive response.
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param httpHeaders The HTTP headers
    * @param responseType The response object type
@@ -382,6 +425,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriParameters The URI parameters
    * @param request The request object
    * @param responseType The response object type
@@ -399,6 +445,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param request The request object
@@ -418,6 +467,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param httpHeaders The HTTP headers
@@ -439,6 +491,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param request The request object
    * @param responseType The response object type
    * @param exceptionMapper The response exception mapper
@@ -454,6 +509,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param request The request object
    * @param responseType The response object type
@@ -471,6 +529,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param httpHeaders The HTTP headers
    * @param request The request object
@@ -490,6 +551,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriParameters The URI parameters
    * @param request The request object
    * @param responseType The response object type
@@ -505,6 +568,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param request The request object
@@ -522,6 +587,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param httpHeaders The HTTP headers
@@ -541,6 +608,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param request The request object
    * @param responseType The response object type
    * @return The response object
@@ -554,6 +623,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param request The request object
    * @param responseType The response object type
@@ -569,6 +640,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send POST request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param httpHeaders The HTTP headers
    * @param request The request object
@@ -586,6 +659,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriParameters The URI parameters
    * @param request The request object
    * @param responseType The response object type
@@ -603,6 +679,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param request The request object
@@ -622,6 +701,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param httpHeaders The HTTP headers
@@ -643,6 +725,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param request The request object
    * @param responseType The response object type
    * @param exceptionMapper The response exception mapper
@@ -658,6 +743,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param request The request object
    * @param responseType The response object type
@@ -675,6 +763,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param httpHeaders The HTTP headers
    * @param request The request object
@@ -694,6 +785,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriParameters The URI parameters
    * @param request The request object
    * @param responseType The response object type
@@ -709,6 +802,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param request The request object
@@ -726,6 +821,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param httpHeaders The HTTP headers
@@ -745,6 +842,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param request The request object
    * @param responseType The response object type
    * @return The response object
@@ -758,6 +857,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param request The request object
    * @param responseType The response object type
@@ -773,6 +874,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PUT request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param httpHeaders The HTTP headers
    * @param request The request object
@@ -790,6 +893,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriParameters The URI parameters
    * @param request The request object
    * @param responseType The response object type
@@ -807,6 +913,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param request The request object
@@ -826,6 +935,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param httpHeaders The HTTP headers
@@ -847,6 +959,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param request The request object
    * @param responseType The response object type
    * @param exceptionMapper The response exception mapper
@@ -862,6 +977,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param request The request object
    * @param responseType The response object type
@@ -879,6 +997,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param httpHeaders The HTTP headers
    * @param request The request object
@@ -898,6 +1019,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriParameters The URI parameters
    * @param request The request object
    * @param responseType The response object type
@@ -913,6 +1036,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param request The request object
@@ -930,6 +1055,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param httpHeaders The HTTP headers
@@ -949,6 +1076,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param request The request object
    * @param responseType The response object type
    * @return The response object
@@ -962,6 +1091,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param request The request object
    * @param responseType The response object type
@@ -977,6 +1108,8 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send PATCH request and receive response.
+   * @param <Rq> The request type
+   * @param <Rs> The response type
    * @param uriPath The URI path
    * @param httpHeaders The HTTP headers
    * @param request The request object
@@ -994,6 +1127,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send DELETE request.
+   * @param <Em> The exception mapper type
    * @param uriParameters The URI parameters
    * @param exceptionMapper The response exception mapper
    * @throws RemotingException if unable to send the request, or when an error response is received
@@ -1006,6 +1140,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send DELETE request.
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param exceptionMapper The response exception mapper
@@ -1020,6 +1155,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send DELETE request.
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param uriParameters The URI parameters
    * @param httpHeaders The HTTP headers
@@ -1036,8 +1172,9 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send DELETE request.
+   * @param <Em> The exception mapper type
    * @param exceptionMapper The response exception mapper
-=   * @throws RemotingException if unable to send the request, or when an error response is received
+   * @throws RemotingException if unable to send the request, or when an error response is received
    */
   public <Em extends ResponseExceptionMapper> void delete(
     final Class<Em> exceptionMapper) throws RemotingException{
@@ -1046,6 +1183,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send DELETE request.
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param exceptionMapper The response exception mapper
    * @throws RemotingException if unable to send the request, or when an error response is received
@@ -1058,6 +1196,7 @@ public class RestClient extends RestClientConfig{
 
   /**
    * Send DELETE request.
+   * @param <Em> The exception mapper type
    * @param uriPath The URI path
    * @param httpHeaders The HTTP headers
    * @param exceptionMapper The response exception mapper
@@ -1185,8 +1324,11 @@ public class RestClient extends RestClientConfig{
         httpHeaderMap = new HttpHeaders();
     httpHeaderMap.setContentType((payload == null) ? null : mediaType);
     httpHeaderMap.setAccept(Collections.singletonList(mediaType));
-    httpHeaderMap.set("X-Origin-Id", transactionContext.getOriginId());
+    if (transactionContext.getOriginId() != null)
+      httpHeaderMap.set("X-Origin-Id", transactionContext.getOriginId());
     httpHeaderMap.set("X-Request-Id", transactionContext.getTransactionId());
+    if (transactionContext.getCorrelationId() != null)
+      httpHeaderMap.set("X-Correlation-Id", transactionContext.getCorrelationId());
 
         if (httpHeaders != null){
 
@@ -1198,6 +1340,14 @@ public class RestClient extends RestClientConfig{
 
         if (basicAuth == true){
             httpHeaderMap.setBasicAuth(getUsername(), getPassword());
+    }
+
+        if (bearerAuth == true){
+            httpHeaderMap.setBearerAuth(getToken());
+    }
+
+        if (apiKeyAuth == true){
+            httpHeaderMap.set("X-API-Key", getToken());
     }
 
         if (proxyAuth == true){

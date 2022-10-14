@@ -132,7 +132,7 @@ class ConnectionPool{
                 connectionManager.closeExpiredConnections();
         connectionManager.closeIdleConnections(connectionManager.getValidateAfterInactivity(), TimeUnit.MILLISECONDS);
 
-                ThreadControl.wait(this, configuration.getPruneInterval());
+                ThreadControl.wait(this, configuration.getPruneInterval(), TimeUnit.MILLISECONDS);
       }
       catch (Exception exception){
         logger.error(methodName, "Failed to prune expired connections: ", exception.getMessage(), exception);
