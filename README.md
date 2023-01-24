@@ -98,6 +98,13 @@ The REST client may be configured using these application properties.
 |`proxy-url`||The URL of the proxy server|
 |`proxy-username`||The proxy user name, if the proxy server requires one|
 |`proxy-password`||The proxy password, if the proxy server requires one|
+|`key-store`||The path to the key store|
+|`key-store-type`|jks|The type of the key store|
+|`key-store-password`||The password which is required to access the key store|
+|`key-password`||The password which is required to access the key pair in the key store.  A password should be set on the key pair and should at the very least be the same as the password to the key store|
+|`trust-store`||The path to the trust store|
+|`trust-store-type`|jks|The type of the trust store|
+|`trust-store-password`||The password which is required to access the trust store|
 |`maximum-connections`|1000|The maximum number of connections to open to the target endpoint|
 |`connection-timeout`|30 s|The amount of time to allow for a new connection to open to the target endpoint|
 |`request-timeout`|60 s|The amount of time to allow for a request to the target endpoint to complete|
