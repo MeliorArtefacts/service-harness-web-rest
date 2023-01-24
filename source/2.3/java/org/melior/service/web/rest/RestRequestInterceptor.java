@@ -1,10 +1,10 @@
-/* __  __    _ _      
-  |  \/  |  | (_)       
+/* __  __      _ _            
+  |  \/  |    | (_)           
   | \  / | ___| |_  ___  _ __ 
   | |\/| |/ _ \ | |/ _ \| '__|
   | |  | |  __/ | | (_) | |   
   |_|  |_|\___|_|_|\___/|_|   
-    Service Harness
+        Service Harness
 */
 package org.melior.service.web.rest;
 import java.time.Instant;
@@ -36,300 +36,336 @@ import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 /**
- * TODO
+ * Intercepts any HTTP REST requests which are received by the application and routes
+ * them past the configured {@code WorkManager} to allow the {@code WorkManager}
+ * to control the flow of requests through the application.
+ * <p>
+ * When an HTTP REST request is received, then the "X-Origin-Id", "X-Request-Id" and
+ * "X-Correlation-Id" headers are extracted from the request and the transaction
+ * context is populated accordingly.  If the "X-Request-Id" header is absent, then
+ * the transaction context is populated with an automatically generated UUID.
+ * <p>
+ * When an HTTP REST request completes, then the "X-Request-Id" and "X-Correlation-Id"
+ * headers in the HTTP REST response are populated with appropriate values from the
+ * transaction context, before the response is sent to the client application.
  * @author Melior
  * @since 2.0
  */
 @ControllerAdvice
-public class RestRequestInterceptor implements HandlerInterceptor, ResponseBodyAdvice<Object>{
+public class RestRequestInterceptor implements HandlerInterceptor, ResponseBodyAdvice<Object> {
+
     public static final String TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
 
     protected Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private WorkManager workManager;
 
-  /**
-   * Constructor.
-   * @param serviceContext The service context
-   */
-  public RestRequestInterceptor(
-    final ServiceContext serviceContext){
+    /**
+     * Constructor.
+     * @param serviceContext The service context
+     */
+    public RestRequestInterceptor(
+        final ServiceContext serviceContext) {
+
         super();
 
         this.workManager = ServiceContext.getWorkManager();
-  }
+    }
 
-  /**
-   * Process inbound REST request.
-   * @param request The request
-   * @param response The response
-   * @param handler The handler
-   * @throws Exception if unable to process the request
-   */
-  public boolean preHandle(
-    final HttpServletRequest request,
-    final HttpServletResponse response,
-    final Object handler) throws Exception{
+    /**
+     * Process inbound REST request.
+     * @param request The request
+     * @param response The response
+     * @param handler The handler
+     * @throws Exception if unable to process the request
+     */
+    public boolean preHandle(
+        final HttpServletRequest request,
+        final HttpServletResponse response,
+        final Object handler) throws Exception {
+
         String operation;
 
         operation = getOperation(request);
 
         startRequest(request, operation);
 
-    return true;
-  }
+        return true;
+    }
 
-  /**
-   * Process outbound REST response/exception.
-   * @param request The request
-   * @param response The response
-   * @param handler The handler
-   * @param modelAndView The model and view
-   * @throws Exception if unable to process the response/exception
-   */
-  public void postHandle(
-    final HttpServletRequest request,
-    final HttpServletResponse response,
-    final Object handler,
-    final ModelAndView modelAndView) throws Exception{
+    /**
+     * Process outbound REST response/exception.
+     * @param request The request
+     * @param response The response
+     * @param handler The handler
+     * @param modelAndView The model and view
+     * @throws Exception if unable to process the response/exception
+     */
+    public void postHandle(
+        final HttpServletRequest request,
+        final HttpServletResponse response,
+        final Object handler,
+        final ModelAndView modelAndView) throws Exception {
+
         HttpStatus httpStatus;
 
-    try{
-            httpStatus = HttpStatus.valueOf(response.getStatus());
-    }
-    catch (Exception exception){
-            httpStatus = null;
-    }
+        try {
 
-        if ((httpStatus != null) && (httpStatus.isError() == false)){
+            httpStatus = HttpStatus.valueOf(response.getStatus());
+        }
+        catch (Exception exception) {
+
+            httpStatus = null;
+        }
+
+        if ((httpStatus != null) && (httpStatus.isError() == false)) {
+
             completeRequest(response, false);
+        }
+
     }
 
-  }
+    /**
+     * Process outbound REST response/exception after it has completed.
+     * @param request The request
+     * @param response The response
+     * @param handler The handler
+     * @param exception The exception
+     * @throws Exception if unable to process the response/exception
+     */
+    public void afterCompletion(
+        final HttpServletRequest request,
+        final HttpServletResponse response,
+        final Object handler,
+        final Exception exception) throws Exception {
 
-  /**
-   * Process outbound REST response/exception after it has completed.
-   * @param request The request
-   * @param response The response
-   * @param handler The handler
-   * @param exception The exception
-   * @throws Exception if unable to process the response/exception
-   */
-  public void afterCompletion(
-    final HttpServletRequest request,
-    final HttpServletResponse response,
-    final Object handler,
-    final Exception exception) throws Exception{
         HttpStatus httpStatus;
 
-    try{
+        try {
+
             httpStatus = HttpStatus.valueOf(response.getStatus());
-    }
-    catch (Exception exception2){
+        }
+        catch (Exception exception2) {
+
             httpStatus = null;
-    }
+        }
 
-        if ((httpStatus == null) || (httpStatus.isError() == true)){
+        if ((httpStatus == null) || (httpStatus.isError() == true)) {
+
             completeRequest(response, true);
+        }
+
     }
 
-  }
+    /**
+     * Support outbound REST response/exception.
+     * @param returnType The return type
+     * @param converterType The converter type
+     * @return true for all responses/exceptions
+     */
+    public boolean supports(
+        final MethodParameter returnType,
+        final Class<? extends HttpMessageConverter<?>> converterType) {
+        return true;
+    }
 
-  /**
-   * Support outbound REST response/exception.
-   * @param returnType The return type
-   * @param converterType The converter type
-   * @return true for all responses/exceptions
-   */
-  public boolean supports(
-    final MethodParameter returnType,
-    final Class<? extends HttpMessageConverter<?>> converterType){
-    return true;
-  }
+    /**
+     * Process outbound REST response/exception before it is sent.
+     * @param body The response/exception body
+     * @param returnType The return type
+     * @param selectedContentType The content type
+     * @param selectedConverterType The converter type
+     * @param request The request
+     * @param response The response
+     * @return The response/exception body
+     */
+    public Object beforeBodyWrite(
+        final Object body,
+        final MethodParameter returnType,
+        final MediaType selectedContentType,
+        final Class<? extends HttpMessageConverter<?>> selectedConverterType,
+        final ServerHttpRequest request,
+        final ServerHttpResponse response) {
 
-  /**
-   * Process outbound REST response/exception before it is sent.
-   * @param body The response/exception body
-   * @param returnType The return type
-   * @param selectedContentType The content type
-   * @param selectedConverterType The converter type
-   * @param request The request
-   * @param response The response
-   * @return The response/exception body
-   */
-  public Object beforeBodyWrite(
-    final Object body,
-    final MethodParameter returnType,
-    final MediaType selectedContentType,
-    final Class<? extends HttpMessageConverter<?>> selectedConverterType,
-    final ServerHttpRequest request,
-    final ServerHttpResponse response){
         modifyResponse(response);
 
-    return body;
-  }
+        return body;
+    }
 
-  /**
-   * Start processing request.
-   * @param request The request
-   * @param operation The operation
-   * @throws Exception if unable to start processing the request
-   */
-  public final void startRequest(
-    final HttpServletRequest request,
-    final String operation) throws Exception{
+    /**
+     * Start processing request.
+     * @param request The request
+     * @param operation The operation
+     * @throws Exception if unable to start processing the request
+     */
+    public final void startRequest(
+        final HttpServletRequest request,
+        final String operation) throws Exception {
+
         String methodName = "startRequest";
-    String transactionId;
-    String correlationId;
-    TransactionContext transactionContext;
+        String transactionId;
+        String correlationId;
+        TransactionContext transactionContext;
 
         transactionContext = TransactionContext.get();
 
-        if ("/error".equals(operation) == true){
+        if ("/error".equals(operation) == true) {
+
             transactionContext.setOperation(operation);
 
-      return;
-    }
+            return;
+        }
 
-    try{
+        try {
+
             transactionId = request.getHeader("X-Request-Id");
-      correlationId = request.getHeader("X-Correlation-Id");
+            correlationId = request.getHeader("X-Correlation-Id");
 
             transactionContext.startTransaction();
-      transactionContext.setOriginId(request.getHeader("X-Origin-Id"));
-      transactionContext.setTransactionId(getTransactionId(ObjectUtil.coalesce(transactionId, correlationId)));
-      transactionContext.setCorrelationId(ObjectUtil.coalesce(correlationId, transactionContext.getTransactionId()));
-      transactionContext.setOperation(operation);
-    }
-    catch (Exception exception){
-      logger.error(methodName, "Failed to get tracking data from request: ", exception.getMessage(), exception);
-    }
+            transactionContext.setOriginId(request.getHeader("X-Origin-Id"));
+            transactionContext.setTransactionId(getTransactionId(ObjectUtil.coalesce(transactionId, correlationId)));
+            transactionContext.setCorrelationId(ObjectUtil.coalesce(correlationId, transactionContext.getTransactionId()));
+            transactionContext.setOperation(operation);
+        }
+        catch (Exception exception) {
+            logger.error(methodName, "Failed to get tracking data from request: ", exception.getMessage(), exception);
+        }
 
-    try{
+        try {
+
             workManager.startRequest(transactionContext);
+        }
+        catch (ApplicationException exception) {
+            logger.error(methodName, "Failed to notify work manager that request has started: ", exception.getMessage(), exception);
+
+            throw new RestInterfaceException(exception.getType(), exception.getCode(), exception.getMessage());
+        }
+        catch (Exception exception) {
+            logger.error(methodName, "Failed to notify work manager that request has started: ", exception.getMessage(), exception);
+
+            throw new RestInterfaceException(ExceptionType.UNEXPECTED, "", exception.getMessage());
+        }
+
     }
-    catch (ApplicationException exception){
-      logger.error(methodName, "Failed to notify work manager that request has started: ", exception.getMessage(), exception);
 
-      throw new RestInterfaceException(exception.getType(), exception.getCode(), exception.getMessage());
-    }
-    catch (Exception exception){
-      logger.error(methodName, "Failed to notify work manager that request has started: ", exception.getMessage(), exception);
+    /**
+     * Modify response.
+     * @param response The response
+     */
+    private final void modifyResponse(
+        final ServerHttpResponse response) {
 
-      throw new RestInterfaceException(ExceptionType.UNEXPECTED, "", exception.getMessage());
-    }
-
-  }
-
-  /**
-   * Modify response.
-   * @param response The response
-   */
-  private final void modifyResponse(
-    final ServerHttpResponse response){
         String methodName = "modifyResponse";
-    TransactionContext transactionContext;
-    String requestTimestamp;
-    String responseTimestamp;
-    HttpHeaders headers;
+        TransactionContext transactionContext;
+        String requestTimestamp;
+        String responseTimestamp;
+        HttpHeaders headers;
 
         transactionContext = TransactionContext.get();
 
-    try{
+        try {
+
             requestTimestamp = DateFormatter.formatTimestamp(LocalDateTime.ofInstant(
-        Instant.ofEpochMilli(transactionContext.getStartTimeMillis()),
-        TimeZone.getDefault().toZoneId()), TIMESTAMP_FORMAT);
+                Instant.ofEpochMilli(transactionContext.getStartTimeMillis()),
+                TimeZone.getDefault().toZoneId()), TIMESTAMP_FORMAT);
 
             responseTimestamp = DateFormatter.formatTimestamp(AccurateLocalDateTime.now(), TIMESTAMP_FORMAT);
 
             headers = response.getHeaders();
-      headers.add("X-Request-Id", transactionContext.getTransactionId());
-      headers.add("X-Correlation-Id", transactionContext.getCorrelationId());
-      headers.add("Request-Timestamp", requestTimestamp);
-      headers.add("Response-Timestamp", responseTimestamp);
-    }
-    catch (Exception exception){
-      logger.error(methodName, "Failed to set tracking data on response: ", exception.getMessage(), exception);
+            headers.add("X-Request-Id", transactionContext.getTransactionId());
+            headers.add("X-Correlation-Id", transactionContext.getCorrelationId());
+            headers.add("Request-Timestamp", requestTimestamp);
+            headers.add("Response-Timestamp", responseTimestamp);
+        }
+        catch (Exception exception) {
+            logger.error(methodName, "Failed to set tracking data on response: ", exception.getMessage(), exception);
+        }
+
     }
 
-  }
+    /**
+     * Complete processing request. 
+     * @param response The response
+     * @param isException true if the response is an exception, false otherwise
+     */
+    public final void completeRequest(
+        final HttpServletResponse response,
+        final boolean isException) {
 
-  /**
-   * Complete processing request. 
-   * @param response The response
-   * @param isException true if the response is an exception, false otherwise
-   */
-  public final void completeRequest(
-    final HttpServletResponse response,
-    final boolean isException){
         String methodName = "completeRequest";
-    TransactionContext transactionContext;
-    String requestTimestamp;
-    String responseTimestamp;
+        TransactionContext transactionContext;
+        String requestTimestamp;
+        String responseTimestamp;
 
         transactionContext = TransactionContext.get();
 
-        if ("/error".equals(transactionContext.getOperation()) == true){
-      return;
-    }
+        if ("/error".equals(transactionContext.getOperation()) == true) {
+            return;
+        }
 
-    try{
+        try {
+
             workManager.completeRequest(transactionContext, isException);
-    }
-    catch (Exception exception){
-      logger.error(methodName, "Failed to notify work manager that request has completed: ", exception.getMessage(), exception);
-    }
+        }
+        catch (Exception exception) {
+            logger.error(methodName, "Failed to notify work manager that request has completed: ", exception.getMessage(), exception);
+        }
 
-    try{
+        try {
 
-            if (response.isCommitted() == false){
+            if (response.isCommitted() == false) {
+
                 requestTimestamp = DateFormatter.formatTimestamp(LocalDateTime.ofInstant(
-          Instant.ofEpochMilli(transactionContext.getStartTimeMillis()),
-          TimeZone.getDefault().toZoneId()), TIMESTAMP_FORMAT);
+                    Instant.ofEpochMilli(transactionContext.getStartTimeMillis()),
+                    TimeZone.getDefault().toZoneId()), TIMESTAMP_FORMAT);
 
                 responseTimestamp = DateFormatter.formatTimestamp(AccurateLocalDateTime.now(), TIMESTAMP_FORMAT);
 
                 response.setHeader("X-Request-Id", transactionContext.getTransactionId());
-        response.setHeader("X-Correlation-Id", transactionContext.getCorrelationId());
-        response.setHeader("Request-Timestamp", requestTimestamp);
-        response.setHeader("Response-Timestamp", responseTimestamp);
-      }
+                response.setHeader("X-Correlation-Id", transactionContext.getCorrelationId());
+                response.setHeader("Request-Timestamp", requestTimestamp);
+                response.setHeader("Response-Timestamp", responseTimestamp);
+            }
 
             transactionContext.reset();
-    }
-    catch (Exception exception){
-      logger.error(methodName, "Failed to set tracking data on response: ", exception.getMessage(), exception);
+        }
+        catch (Exception exception) {
+            logger.error(methodName, "Failed to set tracking data on response: ", exception.getMessage(), exception);
+        }
+
     }
 
-  }
+    /**
+     * Get operation.
+     * @param request The request
+     * @return The operation
+     */
+    private String getOperation(
+        final HttpServletRequest request) {
 
-  /**
-   * Get operation.
-   * @param request The request
-   * @return The operation
-   */
-  private String getOperation(
-    final HttpServletRequest request){
         String operation;
 
-    try{
+        try {
+
             operation = request.getMethod() + " " + request.getRequestURI();
-    }
-    catch (Exception exception){
+        }
+        catch (Exception exception) {
+
             operation = "Unknown";
+        }
+
+        return operation;
     }
 
-    return operation;
-  }
+    /**
+     * Get transaction identifier.  Generates a UUID if the transaction identifier is undefined.
+     * @param transactionId The provided transaction identifier
+     * @return The resultant transaction identifier
+     */
+    private String getTransactionId(
+        final String transactionId) {
 
-  /**
-   * Get transaction identifier.  Generates a UUID if the transaction identifier is undefined.
-   * @param transactionId The provided transaction identifier
-   * @return The resultant transaction identifier
-   */
-  private String getTransactionId(
-    final String transactionId){
         return (transactionId == null) ? UUID.randomUUID().toString() : transactionId;
-  }
+    }
 
 }

@@ -1,10 +1,10 @@
-/* __  __    _ _      
-  |  \/  |  | (_)       
+/* __  __      _ _            
+  |  \/  |    | (_)           
   | \  / | ___| |_  ___  _ __ 
   | |\/| |/ _ \ | |/ _ \| '__|
   | |  | |  __/ | | (_) | |   
   |_|  |_|\___|_|_|\___/|_|   
-    Service Harness
+        Service Harness
 */
 package org.melior.client.web.rest;
 import java.io.IOException;
@@ -28,170 +28,183 @@ import org.melior.logging.core.Logger;
 import org.melior.logging.core.LoggerFactory;
 
 /**
- * TODO
+ * Implements a manager for persistent HTTP {@code Connection} objects, for connections to
+ * HTTP end-points. The manager writes statistics from the underlying connection pool to
+ * the logs whenever a {@code Connection} is borrowed from the pool.
  * @author Melior
  * @since 2.0
  */
-public class ConnectionManager implements HttpClientConnectionManager{
+public class ConnectionManager implements HttpClientConnectionManager {
+
     protected Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private PoolingHttpClientConnectionManager connectionManager;
 
     private ConnectionPool connectionPool;
 
-  /**
-   * Constructor.
-   * @param configuration The client configuration
-   * @param ssl The SSL indicator
-   * @param sslContext The SSL context
-   */
-  public ConnectionManager(
-    final RestClientConfig configuration,
-    final boolean ssl,
-    final SSLContext sslContext){
+    /**
+     * Constructor.
+     * @param configuration The client configuration
+     * @param ssl The SSL indicator
+     * @param sslContext The SSL context
+     */
+    public ConnectionManager(
+        final RestClientConfig configuration,
+        final boolean ssl,
+        final SSLContext sslContext) {
+
         super();
 
         RegistryBuilder<ConnectionSocketFactory> socketFactoryRegistryBuilder;
 
         socketFactoryRegistryBuilder = RegistryBuilder.<ConnectionSocketFactory>create()
-      .register("http", PlainConnectionSocketFactory.getSocketFactory());
+            .register("http", PlainConnectionSocketFactory.getSocketFactory());
 
-        if (ssl == true){
+        if (ssl == true) {
 
-            if (sslContext != null){
-                socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
-          sslContext, NoopHostnameVerifier.INSTANCE));
-      }
-            else if ((configuration.getKeyStore() != null) || (configuration.getTrustStore() != null)){
-                socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
-          ClientSSLContext.ofKeyStore("TLS", configuration), NoopHostnameVerifier.INSTANCE));
-      }
-      else{
-                socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
-          ClientSSLContext.ofLenient("TLS"), NoopHostnameVerifier.INSTANCE));
-      }
+            if (sslContext != null) {
 
-    }
-    else{
+                socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
+                    sslContext, NoopHostnameVerifier.INSTANCE));
+            }
+
+            else if ((configuration.getKeyStore() != null) || (configuration.getTrustStore() != null)) {
+
+                socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
+                    ClientSSLContext.ofKeyStore("TLS", configuration), NoopHostnameVerifier.INSTANCE));
+            }
+            else {
+
+                socketFactoryRegistryBuilder.register("https", new SSLConnectionSocketFactory(
+                    ClientSSLContext.ofLenient("TLS"), NoopHostnameVerifier.INSTANCE));
+            }
+
+        }
+        else {
+
             socketFactoryRegistryBuilder.register("https", SSLConnectionSocketFactory.getSocketFactory());
-    }
+        }
 
         connectionManager = new PoolingHttpClientConnectionManager(socketFactoryRegistryBuilder.build(),
-      null, null, null, -1, TimeUnit.MILLISECONDS);
-    connectionManager.setMaxTotal(1000);
-    connectionManager.setDefaultMaxPerRoute(1000);
-    connectionManager.setValidateAfterInactivity(Integer.MAX_VALUE);
+            null, null, null, -1, TimeUnit.MILLISECONDS);
+        connectionManager.setMaxTotal(1000);
+        connectionManager.setDefaultMaxPerRoute(1000);
+        connectionManager.setValidateAfterInactivity(Integer.MAX_VALUE);
 
         connectionPool = new ConnectionPool(configuration, connectionManager);
-  }
+    }
 
-  /**
-   * Set maximum number of connections per route.
-   * @param route The route
-   * @param max The maximum number of connections
-   */
-  void setMaxPerRoute(
-    final HttpRoute route,
-    final int max){
+    /**
+     * Set maximum number of connections per route.
+     * @param route The route
+     * @param max The maximum number of connections
+     */
+    void setMaxPerRoute(
+        final HttpRoute route,
+        final int max) {
+
         connectionManager.setMaxPerRoute(route, max);
-  }
+    }
 
-  /**
-   * Set inactivity timeout for connections.
-   * @param inactivityTimeout The inactivity timeout
-   */
-  void setValidateAfterInactivity(
-    final int inactivityTimeout){
+    /**
+     * Set inactivity timeout for connections.
+     * @param inactivityTimeout The inactivity timeout
+     */
+    void setValidateAfterInactivity(
+        final int inactivityTimeout) {
+
         connectionManager.setValidateAfterInactivity(Math.min(connectionManager.getValidateAfterInactivity(), inactivityTimeout));
-  }
+    }
 
-  /**
-   * Request connection.
-   * @param route The route
-   * @param state The state
-   * @return The connection request
-   */
-  public ConnectionRequest requestConnection(
-    final HttpRoute route,
-    final Object state){
-    return getConnection(route, state);
-  }
+    /**
+     * Request connection.
+     * @param route The route
+     * @param state The state
+     * @return The connection request
+     */
+    public ConnectionRequest requestConnection(
+        final HttpRoute route,
+        final Object state) {
+        return getConnection(route, state);
+    }
 
-  /**
-   * Get connection.
-   * @param route The route
-   * @param state The state
-   * @return The connection request
-   */
-  public ConnectionRequest getConnection(
-    final HttpRoute route,
-    final Object state){
+    /**
+     * Get connection.
+     * @param route The route
+     * @param state The state
+     * @return The connection request
+     */
+    public ConnectionRequest getConnection(
+        final HttpRoute route,
+        final Object state) {
+
         String methodName = "getConnection";
-    HttpHost host;
-    PoolStats poolStats;
-    final ConnectionRequest connectionRequest;
+        HttpHost host;
+        PoolStats poolStats;
+        final ConnectionRequest connectionRequest;
 
         host = route.getTargetHost();
 
         poolStats = connectionManager.getStats(route);
 
         logger.debug(methodName, "Connection pool [", host.getHostName(), ":", host.getPort(), "]: total=", (poolStats.getAvailable() + poolStats.getLeased()),
-      ", active=", poolStats.getLeased(), ", deficit=", poolStats.getPending());
+            ", active=", poolStats.getLeased(), ", deficit=", poolStats.getPending());
 
         connectionRequest = connectionPool.getConnection(route, state);
 
-    return connectionRequest;
-  }
+        return connectionRequest;
+    }
 
-  /**
-   * Release connection.
-   * @param connection The connection
-   * @param newState The new state
-   * @param validDuration The valid duration
-   * @param timeUnit The time unit
-   */
-  public void releaseConnection(
-    final HttpClientConnection connection,
-    final Object newState,
-    final long validDuration,
-    final TimeUnit timeUnit){
+    /**
+     * Release connection.
+     * @param connection The connection
+     * @param newState The new state
+     * @param validDuration The valid duration
+     * @param timeUnit The time unit
+     */
+    public void releaseConnection(
+        final HttpClientConnection connection,
+        final Object newState,
+        final long validDuration,
+        final TimeUnit timeUnit) {
+
         connectionPool.releaseConnection(connection, newState, validDuration, timeUnit);
-  }
+    }
 
-  public void connect(
-    final HttpClientConnection connection,
-    final HttpRoute route,
-    final int connectTimeout,
-    final HttpContext context) throws IOException{
-    connectionManager.connect(connection, route, connectTimeout, context);
-  }
+    public void connect(
+        final HttpClientConnection connection,
+        final HttpRoute route,
+        final int connectTimeout,
+        final HttpContext context) throws IOException {
+        connectionManager.connect(connection, route, connectTimeout, context);
+    }
 
-  public void upgrade(
-    final HttpClientConnection connection,
-    final HttpRoute route,
-    final HttpContext context) throws IOException{
-    connectionManager.upgrade(connection, route, context);
-  }
+    public void upgrade(
+        final HttpClientConnection connection,
+        final HttpRoute route,
+        final HttpContext context) throws IOException {
+        connectionManager.upgrade(connection, route, context);
+    }
 
-  public void routeComplete(
-    final HttpClientConnection connection,
-    final HttpRoute route,
-    final HttpContext context) throws IOException{
-    connectionManager.routeComplete(connection, route, context);
-  }
+    public void routeComplete(
+        final HttpClientConnection connection,
+        final HttpRoute route,
+        final HttpContext context) throws IOException {
+        connectionManager.routeComplete(connection, route, context);
+    }
 
-  public void closeIdleConnections(
-    final long idletime,
-    final TimeUnit timeUnit){
-    connectionManager.closeIdleConnections(idletime, timeUnit);
-  }
+    public void closeIdleConnections(
+        final long idletime,
+        final TimeUnit timeUnit) {
+        connectionManager.closeIdleConnections(idletime, timeUnit);
+    }
 
-  public void closeExpiredConnections(){
-    connectionManager.closeExpiredConnections();
-  }
+    public void closeExpiredConnections() {
+        connectionManager.closeExpiredConnections();
+    }
 
-  public void shutdown(){
-    connectionManager.shutdown();
-  }
+    public void shutdown() {
+        connectionManager.shutdown();
+    }
 
 }
