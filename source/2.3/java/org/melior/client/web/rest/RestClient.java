@@ -19,7 +19,6 @@ import org.apache.http.impl.DefaultConnectionReuseStrategy;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.protocol.HttpContext;
-import org.codehaus.stax2.XMLInputFactory2;
 import org.melior.client.core.RawAwarePayload;
 import org.melior.client.exception.RemotingException;
 import org.melior.client.exception.ResponseExceptionMapper;
@@ -43,12 +42,7 @@ import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
-import com.ctc.wstx.stax.WstxInputFactory;
-import com.ctc.wstx.stax.WstxOutputFactory;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.xml.XmlFactory;
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 
 /**
  * Implements an easy to use, auto-configuring HTTP REST client with connection
@@ -133,7 +127,6 @@ public class RestClient extends RestClientConfig {
      */
     private void initialize() throws RemotingException {
 
-        XMLInputFactory2 inputFactory;
         ConnectionManager connectionManager;
         RequestConfig requestConfig;
         HttpClientBuilder httpClientBuilder;
@@ -184,16 +177,11 @@ public class RestClient extends RestClientConfig {
             if ((mediaType == MediaType.APPLICATION_XML)
                 || (mediaType == MediaType.TEXT_XML)) {
 
-                inputFactory = new WstxInputFactory();
-                inputFactory.setProperty(XMLInputFactory2.IS_NAMESPACE_AWARE, Boolean.FALSE);
-
-                objectMapper = new XmlMapper(new XmlFactory(inputFactory, new WstxOutputFactory()));
-                objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+                objectMapper = RestObjectMapper.ofXML(false, false, true);
             }
             else {
 
-                objectMapper = new ObjectMapper();
-                objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+                objectMapper = RestObjectMapper.ofJSON(false);
             }
 
             connectionManager = new ConnectionManager(this, ssl, sslContext);
