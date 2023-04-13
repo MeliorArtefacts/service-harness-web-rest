@@ -152,6 +152,12 @@ The REST service harness automatically ingests the following HTTP headers and ma
 ```
 X-Origin-Id
 X-Request-Id
+X-Correlation-Id
+```
+
+If your organization has flagged a service as having an XXE vulnerability because the service is performing substitution of harmless general parameters in DOCTYPE definitions, then use the application property below to strip all DOCTYPE definitions from client requests.
+```
+server.request.disable-dtd=true
 ```
 
 ## References
